@@ -304,7 +304,7 @@ int ilog2(int x) {
  *   Rating: 2
  */
 unsigned float_neg(unsigned uf) {
-	unsigned result = uf & (uf >> 31 << 31 + (~0x00));
+	unsigned result = uf & (((uf >> 31) << 31) + (~0x00));
 	/*
 	very useful trick: 1 ^ 1 = 0; 0 ^ 1 = 1; 1 ^ 0 = 1; 0 ^ 0 = 0; 
 	unsigned result = uf ^ 0x80000000;
@@ -324,7 +324,34 @@ unsigned float_neg(unsigned uf) {
  *   Rating: 4
  */
 unsigned float_i2f(int x) {
-	
+	int sign;
+	int exp;
+	int i = 30;
+	int fraction;
+	int fraction_mask;
+	int delta;
+	sign = (x >> 31) & 0x01;
+	if (x == 0) 
+		return x;
+	else if (x == 0x80000000)
+		exp = 158;//这里的exp是相对与2的次方而言,而不是10的次方,所以不是136
+	else {
+		if (sign)
+			x = -x;
+		while (!(x >> i))
+			i--;
+		exp = i + 127;
+		fraction_mask = 1 << 23 - 1;//0x7fffff
+		x = x << (31 - i);
+		fraction = (x >> 8) & fraction_mask;//截断保留23位
+		x = x & 0xff;//rounding
+		delta = x > 128 || x == 128 && fraction & 0x1; // 相偶数舍入5
+		fraction += delta;
+		if (fraction >> 23)
+			fraction &= fraction_mask;
+		exp++;
+	}
+	return (sign << 31) | (exp << 23) | fraction;
 }
 /* 
  * float_twice - Return bit-level equivalent of expression 2*f for
@@ -338,7 +365,18 @@ unsigned float_i2f(int x) {
  *   Rating: 4
  */
 unsigned float_twice(unsigned uf) {
-  
+	unsigned tmp = uf & 0x7f800000;
+	if (tmp == 0x7f800000) { //NaN或者无穷
+		return uf;
+	}
+	else if (tmp > 0) { //规格化
+		return uf + (1 << 23);
+	}
+	else { //非规格化
+		unsigned frac = uf & 0x007fffff; 
+		unsigned s_exp = uf & 0xff800000; 
+		frac = frac << 1;
+		return frac | s_exp;
+	}
 }
-
 
