@@ -9,22 +9,111 @@
 #define FALSE 0
 #define MAXLINE 100
 
+int num_hits = 0;
+int num_misses = 0;
+int num_evictions = 0;
+int time = 0;
+
+static void cacheVisit(long groupNum, long tag, cache_line** cache, int E)
+{
+	cache_line* group = cache[groupNum];
+	int i;
+	for (i = 0; i < E; i++)
+	{
+		if (group[i].tag == tag)
+			break;
+	}
+	if (i == E)
+	{
+		num_misses++;
+		int j;
+		for (int j = 0; j < E; j++)
+		{
+			if (group[j].valid == 0)
+			{
+				group[j].valid = 1;
+				group[j].tag = tag;
+				group[j].time_stamp = time;
+				break;
+			}
+		}
+		if (j == E)
+		{
+			int k = oldest(group);
+			group[k].tag = tag;
+			group[k].time_stamp = time;
+			num_evictions++;
+		}
+	}
+	else if (group[i].valid == 1)
+	{
+		group[i].time_stamp = time;
+		num_hits++;
+	}
+	else
+	{
+		num_misses++;
+		group[i].valid = 1;
+		group[i].time_stamp = time;
+	}
+
+
+}
+
+static char* h2b(char c)
+{
+	switch (c)
+	{
+	case 0:
+		return "0000";
+	case 1:
+		return "0001";
+	case 2:
+		return "0010";
+	case 3:
+		return "0011";
+	case 4:
+		return "0100";
+	case 5:
+		return "0101";
+	case 6:
+		return "0110";
+	case 7:
+		return "0111";
+	case 8:
+		return "1000";
+	case 9:
+		return "1001";
+	case 10:
+		return "1010";
+	case 11:
+		return "1011";
+	case 12:
+		return "1100";
+	case 13:
+		return "1101";
+	case 14:
+		return "1110";
+	case 15:
+		return "1111";
+	}
+}
+
 typedef struct
 {
 	int valid;
-	int tag;
-	int index;
+	long tag;
+	int time_stamp;
 } cache_line;
 
 int main(int argc, char* argv[])
 {
+
 	int s, S, E, b, B;
 	int h = FALSE, v = FALSE;
 	FILE* pFile;
 	char* line;
-	int num_hits;
-	int num_misses;
-	int num_evictions;
+
 
 	if (argc == 10)
 	{
@@ -32,10 +121,10 @@ int main(int argc, char* argv[])
 		{
 			h = TRUE;
 			v = TRUE;
-		} 
+		}
 		else if (argv[1][0] == 'h')
 			h = TRUE;
-		else 
+		else
 			v = TRUE;
 	}
 
@@ -53,7 +142,6 @@ int main(int argc, char* argv[])
 
 	S = pow(2, s);
 	B = pow(2, b);
-	int tagSize = 8 - s - b;
 
 	cache_line** cache = (cache_line**)malloc(S * sizeof(cache_line*));
 
@@ -64,7 +152,7 @@ int main(int argc, char* argv[])
 		{
 			cache[i][j].valid = 0;
 			cache[i][j].tag = 0;
-			cache[i][j].index = -1;
+			cache[i][j].time_stamp = 0;
 		}
 	}
 
@@ -75,38 +163,56 @@ int main(int argc, char* argv[])
 	{
 		if (line[0] == ' ')
 			continue;
-		char operation = line[0];
+		time++;	
+		char operation = line[1];
+
+		char* offset = strchr(line, ',') + 1;
+		//int objectSize = atoi(offset);
+
+		*(offset - 1) = '\0';
+		char* addressString;
+		strcpy(addressString, line + 3);
+		int addressSize = sizeof(addressString) / sizeof(char);
 		char* address;
-		strncpy(address, line + 3, 8);
-
-		char* tagString;
-		strncpy(tagString, address, tagSize);
-		int tag = atoi(tagString);
-
-		int groupNum = 0;
-		for (int i = tagSize + s; i >= tagSize; i--)
+		for (int i = 0; i < addressSize; i++)
 		{
-			groupNum += pow(2, (int)(address[i] - '0'));
+			char* temp = h2b(addressString[i]);
+			strcat(address, temp);
 		}
 
-		int objectSize = (int)(line[12] - '0');
-		
+		int tagSize = sizeof(address) / sizeof(char) - s - b;
+		char * tagString;
+		strncpy(tagString, address, tagSize);
+		long tag = atol(tagString);
+
+		long groupNum = -1;
+		int n = 0;
+		for (int i = tagSize + s - 1; i >= tagSize; i--)
+		{
+			groupNum += pow(2, n++) * (int)(address[i] - '0');
+		}
+		int isMiss;
 		switch (operation)
 		{
 		case 'L':
-
+			cacheVisit(groupNum, tag, cache, E);
 			break;
 		case 'M':
-
+			cacheVisit(groupNum, tag, cache, E);
+			num_hits++;
 			break;
 		case 'S':
-
+			cacheVisit(groupNum, tag, cache, E);
 			break;
 		default:
 			break;
 		}
 	}
 
-	//printSummary(num_hits, num_misses, num_evictions);
+	printSummary(num_hits, num_misses, num_evictions);
+	for (int i = 0; i < S; i++)
+		free(cache[i]);
+	free(cache);
+	fclose(pFile);
 	return 0;
 }
