@@ -14,6 +14,26 @@ int num_misses = 0;
 int num_evictions = 0;
 int time = 0;
 
+typedef struct
+{
+	int valid;
+	long tag;
+	int time_stamp;
+} cache_line;
+
+int oldest(cache_line* group, int E)
+{
+	int oldest = 0;
+	for (int i = 0; i < E; i++)
+	{
+		if (group[oldest].time_stamp > group[i].time_stamp)
+		{
+			oldest = i;
+		}
+	}
+	return oldest;
+}
+
 static void cacheVisit(long groupNum, long tag, cache_line** cache, int E)
 {
 	cache_line* group = cache[groupNum];
@@ -23,11 +43,12 @@ static void cacheVisit(long groupNum, long tag, cache_line** cache, int E)
 		if (group[i].tag == tag)
 			break;
 	}
+
 	if (i == E)
 	{
 		num_misses++;
 		int j;
-		for (int j = 0; j < E; j++)
+		for (j = 0; j < E; j++)
 		{
 			if (group[j].valid == 0)
 			{
@@ -37,9 +58,9 @@ static void cacheVisit(long groupNum, long tag, cache_line** cache, int E)
 				break;
 			}
 		}
-		if (j == E)
+		if (j == E) 
 		{
-			int k = oldest(group);
+			int k = oldest(group, E);
 			group[k].tag = tag;
 			group[k].time_stamp = time;
 			num_evictions++;
@@ -94,25 +115,20 @@ static char* h2b(char c)
 		return "1101";
 	case 14:
 		return "1110";
-	case 15:
-		return "1111";
+	default:
+		return "1111";	
 	}
+
 }
 
-typedef struct
-{
-	int valid;
-	long tag;
-	int time_stamp;
-} cache_line;
 
 int main(int argc, char* argv[])
 {
 
 	int s, S, E, b, B;
 	int h = FALSE, v = FALSE;
-	FILE* pFile;
-	char* line;
+	FILE* pFile = NULL;
+	char line[MAXLINE];
 
 
 	if (argc == 10)
@@ -140,8 +156,8 @@ int main(int argc, char* argv[])
 			pFile = fopen(argv[i + 1], "r");
 	}
 
-	S = pow(2, s);
-	B = pow(2, b);
+	S = (int)pow(2, s);
+	B = (int)pow(2, b);
 
 	cache_line** cache = (cache_line**)malloc(S * sizeof(cache_line*));
 
@@ -163,17 +179,16 @@ int main(int argc, char* argv[])
 	{
 		if (line[0] == ' ')
 			continue;
+
 		time++;	
 		char operation = line[1];
 
-		char* offset = strchr(line, ',') + 1;
-		//int objectSize = atoi(offset);
-
-		*(offset - 1) = '\0';
-		char* addressString;
+		char* offset = strchr(line, ',');
+		*offset = '\0';
+		char addressString[MAXLINE];
 		strcpy(addressString, line + 3);
 		int addressSize = sizeof(addressString) / sizeof(char);
-		char* address;
+		char address[MAXLINE];
 		for (int i = 0; i < addressSize; i++)
 		{
 			char* temp = h2b(addressString[i]);
@@ -181,7 +196,7 @@ int main(int argc, char* argv[])
 		}
 
 		int tagSize = sizeof(address) / sizeof(char) - s - b;
-		char * tagString;
+		char tagString[MAXLINE];
 		strncpy(tagString, address, tagSize);
 		long tag = atol(tagString);
 
@@ -189,9 +204,9 @@ int main(int argc, char* argv[])
 		int n = 0;
 		for (int i = tagSize + s - 1; i >= tagSize; i--)
 		{
-			groupNum += pow(2, n++) * (int)(address[i] - '0');
+			groupNum += (long)(pow(2, n++) * (int)(address[i] - '0'));
 		}
-		int isMiss;
+
 		switch (operation)
 		{
 		case 'L':
@@ -209,7 +224,7 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	printSummary(num_hits, num_misses, num_evictions);
+	//printSummary(num_hits, num_misses, num_evictions);
 	for (int i = 0; i < S; i++)
 		free(cache[i]);
 	free(cache);
