@@ -157,8 +157,7 @@ int main(int argc, char* argv[])
 	}
 
 	S = (int)pow(2, s);
-	B = (int)pow(2, b);
-
+	B = (int)pow(2, b)
 	cache_line** cache = (cache_line**)malloc(S * sizeof(cache_line*));
 
 	for (int i = 0; i < S; i++)
