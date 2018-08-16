@@ -178,7 +178,7 @@ void eval(char *cmdline)
 
 	sigemptyset(&sig_one);
 	sigaddset(&sig_one, SIGCHLD);
-	sigfullset(&mask);
+	sigfillset(&mask);
 
 	int isBuildin = builtin_cmd(argv);
 
@@ -200,7 +200,7 @@ void eval(char *cmdline)
 	sigprocmask(SIG_BLOCK, &mask, &prev);
 	int state = isBG ? BG : FG;
 	addjob(jobs, pid, state, cmdline);
-	sigprocmask(SIG_SETMASK， &prev, NULL);
+	sigprocmask(SIG_SETMASK, &prev, NULL);
 
 	if (!isBG)
 		waitfg(pid);
@@ -305,7 +305,7 @@ void do_bgfg(char **argv)
 	}
 	if (sscanf(argv[1],"%%%d",&jid) > 0)
 	{
-		job_t* curJob = getjobjid(jobs, jid);
+		struct job_t* curJob = getjobjid(jobs, jid);
 		if (curJob == NULL)
 		{
 			printf("%%%d: No such job\n", jid);
@@ -315,7 +315,7 @@ void do_bgfg(char **argv)
 	}
 	if (sscanf(argv[1], "%d", &pid) > 0)
 	{
-		job_t* curJob = getjobpid(jobs, pid);
+		struct job_t* curJob = getjobpid(jobs, pid);
 		if (curJob == NULL)
 		{
 			printf("(%d): No such process\n", pid);
@@ -373,8 +373,10 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+	int olderrno = errno;
+
 	sigset_t mask, prev;
-	sigfullset(&mask);
+	sigfillset(&mask);
 	pid_t child_pid;
 	int status;
 
@@ -385,7 +387,7 @@ void sigchld_handler(int sig)
 		{
 			sigprocmask(SIG_BLOCK, &mask, &prev);
 			deletejob(jobs, child_pid);
-			sigprocmask(SIG_SETMASK， &prev, NULL);
+			sigprocmask(SIG_SETMASK, &prev, NULL);
 		}
 		if (WIFSIGNALED(status))
 		{
@@ -393,18 +395,21 @@ void sigchld_handler(int sig)
 				curJob->jid, curJob->pid, WTERMSIG(status));
 			sigprocmask(SIG_BLOCK, &mask, &prev);
 			deletejob(jobs, child_pid);
-			sigprocmask(SIG_SETMASK， &prev, NULL);
+			sigprocmask(SIG_SETMASK, &prev, NULL);
 
 		}
-		if (WIERMSIG(status))
+		if (WIFSTOPPED(status))
 		{
 			printf("Job [%d] (%d) stopped by signal %d\n",
 				curJob->jid, curJob->pid, WTERMSIG(status));
-			curJob->status = ST;
+			curJob->state = ST;
 		}
 	}
 
-	
+	if (errno != ECHILD)
+		Sio_error("waitpid error");
+
+	errno = olderrno;
     return;
 }
 
@@ -415,9 +420,13 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
+	int olderrno = errno;
+
 	pid_t foreJob = fgpid(jobs);
 	if (foreJob > 0)
 		kill(-foreJob, SIGINT);
+
+	errno = olderrno;
     return;
 }
 
@@ -428,9 +437,13 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+	int olderrno = errno;
+
 	pid_t foreJob = fgpid(jobs);
 	if (foreJob > 0)
 		kill(-foreJob, SIGTSTP);
+
+	errno = olderrno;
     return;
 }
 
@@ -660,8 +673,8 @@ pid_t Fork()
 
 	if ((pid = fork()) < 0)
 		unix_error("fork_error");
-	else
-		return pid;
+
+	return pid;
 }
 
 
