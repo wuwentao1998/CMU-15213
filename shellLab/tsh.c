@@ -169,9 +169,12 @@ void eval(char *cmdline)
 {	
 	char* argv[MAXARGS];
 	int isBG = parseline(cmdline, argv);
-	int pid = 0;
+	pid_t pid = 0;
 
 	if (argv[0] == NULL)
+		return;
+
+	if (builtin_cmd(argv))
 		return;
 
 	sigset_t mask, sig_one, prev;
@@ -179,11 +182,6 @@ void eval(char *cmdline)
 	sigemptyset(&sig_one);
 	sigaddset(&sig_one, SIGCHLD);
 	sigfillset(&mask);
-
-	int isBuildin = builtin_cmd(argv);
-
-	if (isBuildin)
-		return;
 
 	sigprocmask(SIG_BLOCK, &sig_one, &prev);
 	if ((pid = Fork()) == 0)
@@ -200,10 +198,12 @@ void eval(char *cmdline)
 	sigprocmask(SIG_BLOCK, &mask, &prev);
 	int state = isBG ? BG : FG;
 	addjob(jobs, pid, state, cmdline);
-	sigprocmask(SIG_SETMASK, &prev, NULL);
+	sigprocmask(SIG_SETMASK, &prev, NULL);\
 
 	if (!isBG)
 		waitfg(pid);
+	else
+		printf("[%d] (%d) %s", maxjid(jobs), pid, cmdline);
 		
     return;
 }
@@ -272,6 +272,10 @@ int parseline(const char *cmdline, char **argv)
 int builtin_cmd(char **argv) 
 {
 	char* command = argv[0];
+	//如果用户仅仅按下回车键，那么在解析后argv的第一个变量将是一个空指针。
+	//如果用这个空指针去调用strcmp函数会引发segment fault
+	if (command == NULL)
+		return 1;
 	if (!strcmp(command, "quit"))
 		exit(0);
 	if (!strcmp(command, "jobs"))
@@ -295,7 +299,6 @@ void do_bgfg(char **argv)
 	int isBG = (strcmp(argv[0], "bg") == 0);
 	int jid;
 	pid_t pid;
-	int isPid;
 	struct job_t* curJob;
 
 	if (argv[1] == NULL) 
@@ -303,25 +306,25 @@ void do_bgfg(char **argv)
 		printf("%s command requires PID or %%jobid argument\n", argv[0]);
 		return;
 	}
+
+
 	if (sscanf(argv[1],"%%%d",&jid) > 0)
 	{
-		struct job_t* curJob = getjobjid(jobs, jid);
+		curJob = getjobjid(jobs, jid);
 		if (curJob == NULL)
 		{
 			printf("%%%d: No such job\n", jid);
 			return;
 		}
-		isPid = 0;
 	}
-	if (sscanf(argv[1], "%d", &pid) > 0)
+	else if (sscanf(argv[1], "%d", &pid) > 0)
 	{
-		struct job_t* curJob = getjobpid(jobs, pid);
+		curJob = getjobpid(jobs, pid);
 		if (curJob == NULL)
 		{
 			printf("(%d): No such process\n", pid);
 			return;
 		}
-		isPid = 1;
 	}
 	else
 	{
@@ -329,20 +332,22 @@ void do_bgfg(char **argv)
 		return;
 	}
 
-	if (!isPid)
-		curJob = getjobjid(jobs, jid);
-	else
-		curJob = getjobpid(jobs, pid);
-
-	kill(-pid, SIGCONT);
+	pid = curJob->pid;
 
 	if (!isBG)
 	{
+		if (curJob->state == ST)
+			kill(-pid, SIGCONT);
+
 		curJob->state = FG;
 		waitfg(curJob->pid);
 	}
 	else
+	{
+		kill(-pid, SIGCONT);
 		curJob->state = BG;
+		printf("[%d] (%d) %s", jid, curJob->pid, curJob->cmdline);
+	}
 
     return;
 }
@@ -354,9 +359,11 @@ void waitfg(pid_t pid)
 {
 	sigset_t mask;
 
-	sigsuspend(&mask);
+	sigemptyset(&mask);
 	while (fgpid(jobs) > 0)
 		sigsuspend(&mask);
+
+	sigprocmask(SIG_SETMASK, &mask, NULL);
     return;
 }
 
@@ -406,8 +413,8 @@ void sigchld_handler(int sig)
 		}
 	}
 
-	if (errno != ECHILD)
-		Sio_error("waitpid error");
+	//if (errno != ECHILD)
+	//	sio_error("waitpid error");
 
 	errno = olderrno;
     return;
