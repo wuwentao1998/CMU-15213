@@ -198,7 +198,7 @@ void eval(char *cmdline)
 	sigprocmask(SIG_BLOCK, &mask, &prev);
 	int state = isBG ? BG : FG;
 	addjob(jobs, pid, state, cmdline);
-	sigprocmask(SIG_SETMASK, &prev, NULL);\
+	sigprocmask(SIG_SETMASK, &prev, NULL);
 
 	if (!isBG)
 		waitfg(pid);
