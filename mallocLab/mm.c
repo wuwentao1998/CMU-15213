@@ -263,7 +263,7 @@ static void place(void* bp, size_t asize)
 		PUT(HDRP(bp), PACK(csize, 1));//注意是csize不是asize
 		PUT(FTRP(bp), PACK(csize, 1));
 	}
-}
+} 
 
 
 
